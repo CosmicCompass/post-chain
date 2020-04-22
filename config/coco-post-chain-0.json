@@ -1,0 +1,10 @@
+{
+  "key": "testkey",
+  "chain-id": "coco-post-chain-0",
+  "rpc-addr": "http://localhost:26657",
+  "account-prefix": "cosmic",
+  "gas": 200000,
+  "gas-prices": "0.025coco",
+  "default-denom": "coco",
+  "trusting-period": "30m"
+}

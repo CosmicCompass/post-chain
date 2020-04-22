@@ -1,0 +1,19 @@
+{
+  "src": {
+    "chain-id": "coco-post-chain-0",
+    "client-id": "ibconeclient",
+    "connection-id": "ibconeconnection",
+    "channel-id": "ibconexfer",
+    "port-id": "transfer"
+  },
+  "dst": {
+    "chain-id": "coco-post-chain-1",
+    "client-id": "ibczeroclient",
+    "connection-id": "ibczeroconnection",
+    "channel-id": "ibczeroxfer",
+    "port-id": "transfer"
+  },
+  "strategy": {
+    "type": "naive"
+  }
+}
