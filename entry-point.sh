@@ -23,10 +23,10 @@ cocod gentx --name validator --amount 100000000coco --keyring-backend="test"
 cocod collect-gentxs
 
 # Set proper defaults and change ports
-sed -i 's/"leveldb"/"goleveldb"/g' ~/.cocod/config/config.toml
 sed -i 's#"tcp://127.0.0.1:26657"#"tcp://0.0.0.0:26657"#g' ~/.cocod/config/config.toml
 sed -i 's/timeout_commit = "5s"/timeout_commit = "1s"/g' ~/.cocod/config/config.toml
 sed -i 's/timeout_propose = "3s"/timeout_propose = "1s"/g' ~/.cocod/config/config.toml
 sed -i 's/index_all_keys = false/index_all_keys = true/g' ~/.cocod/config/config.toml
 
-cocod start --pruning=nothing
+#enable: while using docker
+#cocod start --pruning=nothing
