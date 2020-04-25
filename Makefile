@@ -30,7 +30,7 @@ init:
 
 install: go.sum
 	go install -mod=readonly  $(BUILD_FLAGS) ./cmd/cocod
-	go install  -mod=readonly $(BUILD_FLAGS) ./cmd/cococli
+	go install -mod=readonly $(BUILD_FLAGS) ./cmd/cococli
 build:
 	go build -o bin/cocod ./cmd/cocod
 	go build -o bin/cococli ./cmd/cococli
