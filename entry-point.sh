@@ -29,4 +29,4 @@ sed -i 's/timeout_propose = "3s"/timeout_propose = "1s"/g' ~/.cocod/config/confi
 sed -i 's/index_all_keys = false/index_all_keys = true/g' ~/.cocod/config/config.toml
 
 #enable: while using docker
-cocod start --pruning=nothing
+#cocod start --pruning=nothing
