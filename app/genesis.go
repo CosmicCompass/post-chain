@@ -3,7 +3,7 @@ package app
 import (
 	"encoding/json"
 	
-	codecstd "github.com/cosmos/cosmos-sdk/codec/std"
+	codecstd "github.com/cosmos/cosmos-sdk/std"
 )
 
 type GenesisState map[string]json.RawMessage
