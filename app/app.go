@@ -3,17 +3,17 @@ package app
 import (
 	"io"
 	"os"
-	
+
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	dbm "github.com/tendermint/tm-db"
-	
+
 	bam "github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/simapp"
 	"github.com/cosmos/cosmos-sdk/std"
-	codecstd "github.com/cosmos/cosmos-sdk/std"
+	cdctypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/version"
@@ -45,7 +45,7 @@ const appName = "CoCo"
 var (
 	DefaultCLIHome  = os.ExpandEnv("$HOME/.cococli")
 	DefaultNodeHome = os.ExpandEnv("$HOME/.cocod")
-	
+
 	ModuleBasics = module.NewBasicManager(
 		genutil.AppModuleBasic{},
 		auth.AppModuleBasic{},
@@ -64,7 +64,7 @@ var (
 		ibc.AppModuleBasic{},
 		transfer.AppModuleBasic{},
 	)
-	
+
 	maccPerms = map[string][]string{
 		auth.FeeCollectorName:           nil,
 		distr.ModuleName:                nil,
@@ -74,7 +74,7 @@ var (
 		gov.ModuleName:                  {auth.Burner},
 		transfer.GetModuleAccountName(): {auth.Minter, auth.Burner},
 	}
-	
+
 	allowedReceivingModAcc = map[string]bool{
 		distr.ModuleName: true,
 	}
@@ -85,34 +85,35 @@ var _ simapp.App = (*CoCoApp)(nil)
 type CoCoApp struct {
 	*bam.BaseApp
 	cdc *codec.Codec
-	
+
 	invCheckPeriod uint
-	
+
 	keys    map[string]*sdk.KVStoreKey
 	tKeys   map[string]*sdk.TransientStoreKey
 	memKeys map[string]*sdk.MemoryStoreKey
-	
+
 	subspaces map[string]params.Subspace
-	
-	accountKeeper        auth.AccountKeeper
-	bankKeeper           bank.Keeper
-	stakingKeeper        staking.Keeper
-	capabilityKeeper     *capability.Keeper
-	slashingKeeper       slashing.Keeper
-	mintKeeper           mint.Keeper
-	distrKeeper          distr.Keeper
-	govKeeper            gov.Keeper
-	crisisKeeper         crisis.Keeper
-	paramsKeeper         params.Keeper
-	upgradeKeeper        upgrade.Keeper
-	evidenceKeeper       evidence.Keeper
-	ibcKeeper            *ibc.Keeper
-	transferKeeper       transfer.Keeper
+
+	accountKeeper    auth.AccountKeeper
+	bankKeeper       bank.Keeper
+	stakingKeeper    staking.Keeper
+	capabilityKeeper *capability.Keeper
+	slashingKeeper   slashing.Keeper
+	mintKeeper       mint.Keeper
+	distrKeeper      distr.Keeper
+	govKeeper        gov.Keeper
+	crisisKeeper     crisis.Keeper
+	paramsKeeper     params.Keeper
+	upgradeKeeper    upgrade.Keeper
+	evidenceKeeper   evidence.Keeper
+	ibcKeeper        *ibc.Keeper
+	transferKeeper   transfer.Keeper
+
 	scopedIBCKeeper      capability.ScopedKeeper
 	scopedTransferKeeper capability.ScopedKeeper
-	
+
 	mm *module.Manager
-	
+
 	sm *module.SimulationManager
 }
 
@@ -121,10 +122,9 @@ func NewCoCoApp(
 	invCheckPeriod uint, skipUpgradeHeights map[int64]bool, home string,
 	baseAppOptions ...func(*bam.BaseApp),
 ) *CoCoApp {
-	
-	cdc := codecstd.MakeCodec(ModuleBasics)
-	appCodec := codecstd.NewAppCodec(cdc)
-	
+
+	appCodec, cdc := MakeCodecs()
+
 	bApp := bam.NewBaseApp(appName, logger, db, auth.DefaultTxDecoder(cdc), baseAppOptions...)
 	bApp.SetCommitMultiStoreTracer(traceStore)
 	bApp.SetAppVersion(version.Version)
@@ -136,7 +136,7 @@ func NewCoCoApp(
 	)
 	tKeys := sdk.NewTransientStoreKeys(params.TStoreKey)
 	memKeys := sdk.NewMemoryStoreKeys(capability.MemStoreKey)
-	
+
 	app := &CoCoApp{
 		BaseApp:        bApp,
 		cdc:            cdc,
@@ -146,7 +146,7 @@ func NewCoCoApp(
 		memKeys:        memKeys,
 		subspaces:      make(map[string]params.Subspace),
 	}
-	
+
 	app.paramsKeeper = params.NewKeeper(appCodec, keys[params.StoreKey], tKeys[params.TStoreKey])
 	app.subspaces[auth.ModuleName] = app.paramsKeeper.Subspace(auth.DefaultParamspace)
 	app.subspaces[bank.ModuleName] = app.paramsKeeper.Subspace(bank.DefaultParamspace)
@@ -156,19 +156,19 @@ func NewCoCoApp(
 	app.subspaces[slashing.ModuleName] = app.paramsKeeper.Subspace(slashing.DefaultParamspace)
 	app.subspaces[gov.ModuleName] = app.paramsKeeper.Subspace(gov.DefaultParamspace).WithKeyTable(gov.ParamKeyTable())
 	app.subspaces[crisis.ModuleName] = app.paramsKeeper.Subspace(crisis.DefaultParamspace)
-	
+
 	bApp.SetParamStore(app.paramsKeeper.Subspace(bam.Paramspace).WithKeyTable(std.ConsensusParamsKeyTable()))
-	
+
 	app.capabilityKeeper = capability.NewKeeper(appCodec, keys[capability.StoreKey], memKeys[capability.MemStoreKey])
 	scopedIBCKeeper := app.capabilityKeeper.ScopeToModule(ibc.ModuleName)
 	scopedTransferKeeper := app.capabilityKeeper.ScopeToModule(transfer.ModuleName)
-	
+
 	app.accountKeeper = auth.NewAccountKeeper(
 		appCodec, keys[auth.StoreKey], app.subspaces[auth.ModuleName], auth.ProtoBaseAccount, maccPerms)
 	app.bankKeeper = bank.NewBaseKeeper(
 		appCodec, keys[bank.StoreKey], app.accountKeeper, app.subspaces[bank.ModuleName], app.ModuleAccountAddrs(),
 	)
-	
+
 	stakingKeeper := staking.NewKeeper(
 		appCodec, keys[staking.StoreKey], app.accountKeeper, app.bankKeeper, app.subspaces[staking.ModuleName],
 	)
@@ -187,7 +187,7 @@ func NewCoCoApp(
 		app.subspaces[crisis.ModuleName], invCheckPeriod, app.bankKeeper, auth.FeeCollectorName,
 	)
 	app.upgradeKeeper = upgrade.NewKeeper(skipUpgradeHeights, keys[upgrade.StoreKey], appCodec, home)
-	
+
 	govRouter := gov.NewRouter()
 	govRouter.AddRoute(gov.RouterKey, gov.ProposalHandler).
 		AddRoute(paramsproposal.RouterKey, params.NewParamChangeProposalHandler(app.paramsKeeper)).
@@ -197,36 +197,36 @@ func NewCoCoApp(
 		appCodec, keys[gov.StoreKey], app.subspaces[gov.ModuleName],
 		app.accountKeeper, app.bankKeeper, &stakingKeeper, govRouter,
 	)
-	
+
 	app.stakingKeeper = *stakingKeeper.SetHooks(
 		staking.NewMultiStakingHooks(app.distrKeeper.Hooks(), app.slashingKeeper.Hooks()),
 	)
-	
+
 	app.ibcKeeper = ibc.NewKeeper(
-		app.cdc, keys[ibc.StoreKey], stakingKeeper, scopedIBCKeeper,
+		app.cdc, appCodec, keys[ibc.StoreKey], stakingKeeper, scopedIBCKeeper,
 	)
-	
+
 	app.transferKeeper = transfer.NewKeeper(
-		app.cdc, keys[transfer.StoreKey],
+		appCodec, keys[transfer.StoreKey],
 		app.ibcKeeper.ChannelKeeper, &app.ibcKeeper.PortKeeper,
 		app.accountKeeper, app.bankKeeper,
 		scopedTransferKeeper,
 	)
 	transferModule := transfer.NewAppModule(app.transferKeeper)
-	
+
 	ibcRouter := port.NewRouter()
 	ibcRouter.AddRoute(transfer.ModuleName, transferModule)
 	app.ibcKeeper.SetRouter(ibcRouter)
-	
+
 	evidenceKeeper := evidence.NewKeeper(
 		appCodec, keys[evidence.StoreKey], &stakingKeeper, app.slashingKeeper,
 	)
 	evidenceRouter := evidence.NewRouter().
 		AddRoute(ibcclient.RouterKey, ibcclient.HandlerClientMisbehaviour(app.ibcKeeper.ClientKeeper))
-	
+
 	evidenceKeeper.SetRouter(evidenceRouter)
 	app.evidenceKeeper = *evidenceKeeper
-	
+
 	app.mm = module.NewManager(
 		genutil.NewAppModule(app.accountKeeper, app.stakingKeeper, app.BaseApp.DeliverTx),
 		auth.NewAppModule(appCodec, app.accountKeeper),
@@ -239,43 +239,45 @@ func NewCoCoApp(
 		distr.NewAppModule(appCodec, app.distrKeeper, app.accountKeeper, app.bankKeeper, app.stakingKeeper),
 		staking.NewAppModule(appCodec, app.stakingKeeper, app.accountKeeper, app.bankKeeper),
 		upgrade.NewAppModule(app.upgradeKeeper),
-		evidence.NewAppModule(appCodec, app.evidenceKeeper),
+		evidence.NewAppModule(app.evidenceKeeper),
 		ibc.NewAppModule(app.ibcKeeper),
 		params.NewAppModule(app.paramsKeeper),
 		transferModule,
 	)
-	
+
 	app.mm.SetOrderBeginBlockers(upgrade.ModuleName, mint.ModuleName, distr.ModuleName, slashing.ModuleName,
 		evidence.ModuleName, staking.ModuleName, ibc.ModuleName)
-	
+
 	app.mm.SetOrderEndBlockers(crisis.ModuleName, gov.ModuleName, staking.ModuleName)
-	
+
 	app.mm.SetOrderInitGenesis(
 		capability.ModuleName, auth.ModuleName, distr.ModuleName, staking.ModuleName, bank.ModuleName,
 		slashing.ModuleName, gov.ModuleName, mint.ModuleName, crisis.ModuleName,
 		ibc.ModuleName, genutil.ModuleName, evidence.ModuleName, transfer.ModuleName,
 	)
-	
+
 	app.mm.RegisterInvariants(&app.crisisKeeper)
 	app.mm.RegisterRoutes(app.Router(), app.QueryRouter())
-	
+
 	app.sm = module.NewSimulationManager(
 		auth.NewAppModule(appCodec, app.accountKeeper),
 		bank.NewAppModule(appCodec, app.bankKeeper, app.accountKeeper),
+		capability.NewAppModule(appCodec, *app.capabilityKeeper),
 		gov.NewAppModule(appCodec, app.govKeeper, app.accountKeeper, app.bankKeeper),
 		mint.NewAppModule(appCodec, app.mintKeeper, app.accountKeeper),
 		staking.NewAppModule(appCodec, app.stakingKeeper, app.accountKeeper, app.bankKeeper, ),
 		distr.NewAppModule(appCodec, app.distrKeeper, app.accountKeeper, app.bankKeeper, app.stakingKeeper),
 		slashing.NewAppModule(appCodec, app.slashingKeeper, app.accountKeeper, app.bankKeeper, app.stakingKeeper),
 		params.NewAppModule(app.paramsKeeper),
+		evidence.NewAppModule(app.evidenceKeeper),
 	)
-	
+
 	app.sm.RegisterStoreDecoders()
-	
+
 	app.MountKVStores(keys)
 	app.MountTransientStores(tKeys)
 	app.MountMemoryStores(memKeys)
-	
+
 	app.SetInitChainer(app.InitChainer)
 	app.SetBeginBlocker(app.BeginBlocker)
 	app.SetAnteHandler(
@@ -285,19 +287,19 @@ func NewCoCoApp(
 		),
 	)
 	app.SetEndBlocker(app.EndBlocker)
-	
+
 	if loadLatest {
 		if err := app.LoadLatestVersion(); err != nil {
 			tmos.Exit(err.Error())
 		}
 	}
-	
-	ctx := app.BaseApp.NewContext(true, abci.Header{})
+
+	ctx := app.BaseApp.NewUncachedContext(true, abci.Header{})
 	app.capabilityKeeper.InitializeAndSeal(ctx)
-	
+
 	app.scopedIBCKeeper = scopedIBCKeeper
 	app.scopedTransferKeeper = scopedTransferKeeper
-	
+
 	return app
 }
 
@@ -314,9 +316,9 @@ func (app *CoCoApp) EndBlocker(ctx sdk.Context, req abci.RequestEndBlock) abci.R
 func (app *CoCoApp) InitChainer(ctx sdk.Context, req abci.RequestInitChain) abci.ResponseInitChain {
 	var genesisState GenesisState
 	app.cdc.MustUnmarshalJSON(req.AppStateBytes, &genesisState)
-	
+
 	return app.mm.InitGenesis(ctx, app.cdc, genesisState)
-	
+
 }
 
 func (app *CoCoApp) LoadHeight(height int64) error {
@@ -328,7 +330,7 @@ func (app *CoCoApp) ModuleAccountAddrs() map[string]bool {
 	for acc := range maccPerms {
 		modAccAddrs[auth.NewModuleAddress(acc).String()] = true
 	}
-	
+
 	return modAccAddrs
 }
 
@@ -337,7 +339,7 @@ func (app *CoCoApp) BlacklistedAccAddrs() map[string]bool {
 	for acc := range maccPerms {
 		blacklistedAddrs[auth.NewModuleAddress(acc).String()] = !allowedReceivingModAcc[acc]
 	}
-	
+
 	return blacklistedAddrs
 }
 
@@ -355,4 +357,15 @@ func GetMaccPerms() map[string][]string {
 		modAccPerms[k] = v
 	}
 	return modAccPerms
+}
+
+func MakeCodecs() (*std.Codec, *codec.Codec) {
+	cdc := std.MakeCodec(ModuleBasics)
+	interfaceRegistry := cdctypes.NewInterfaceRegistry()
+	appCodec := std.NewAppCodec(cdc, interfaceRegistry)
+
+	sdk.RegisterInterfaces(interfaceRegistry)
+	ModuleBasics.RegisterInterfaceModules(interfaceRegistry)
+
+	return appCodec, cdc
 }
